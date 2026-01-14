@@ -46,14 +46,14 @@ ovpn-ui/
 Server (outside container)
 
 ⚠️ Paths must be adjusted to your server user
-
+```
 /home/<USER>/
 ├── openvpn-ca/                     # Easy-RSA + PKI
 │   └── pki/
 ├── openvpn-clients/                # Generated .ovpn files
 ├── ovpn-novo-cliente.sh            # Original working script
 └── ovpn-novo-cliente.container.sh  # Container-compatible wrapper
-
+```
 ✅ Server Requirements
 
 Operating System
@@ -77,16 +77,16 @@ Before installing ovpn-ui, the server must already be working:
 	•	Client generation script works manually
 
 Mandatory test (outside Docker):
-
+```
 cd /home/<USER>/openvpn-ca
 /home/<USER>/ovpn-novo-cliente.container.sh test_manual
-
+```
 🐳 Docker Image Build
 
 docker build -t ovpn-ui:latest .
 
 ▶️ Running the Container
-
+```
 docker run -d --name ovpn-ui \
   --restart unless-stopped \
   -p 127.0.0.1:9001:9001 \
@@ -100,7 +100,7 @@ docker run -d --name ovpn-ui \
   -v /home/<USER>/openvpn-ca:/home/<USER>/openvpn-ca \
   -w /home/<USER>/openvpn-ca \
   ovpn-ui:latest
-
+```
 🌐 Web Routes
 
 GET /health
@@ -130,10 +130,10 @@ Returns all .ovpn files from OVPN_OUTDIR.
 
 GET /download?file=<filename>.ovpn
 
-```
+
 ✅ File path is never exposed
-❌ Absolute paths like /home/<USER>/... are hidden
-```
+❌ Absolute paths like /home/&lt;USER&gt;/... are hidden
+
 
 # Revoke Client
 
@@ -145,8 +145,9 @@ POST /revoke
 🧹 Removing Test Certificates
 
 ## List existing certs
+```
 ls /home/<USER>/openvpn-ca/pki/issued
-
+```
 ## Remove a test client
 ```
 cd /home/<USER>/openvpn-ca
@@ -169,7 +170,7 @@ Restart OpenVPN if required.
 	•	No filesystem paths shown to users
 
 🔁 NGINX Reverse Proxy Example
-
+```
 location /vpn/ {
     proxy_pass http://127.0.0.1:9001/;
     proxy_set_header Host $host;
@@ -177,7 +178,7 @@ location /vpn/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
-
+```
 🚀 Recommended Usage
 	•	Small teams
 	•	MSP / Industrial environments
