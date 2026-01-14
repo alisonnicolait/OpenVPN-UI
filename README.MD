@@ -1,4 +1,4 @@
-
+```
 OpenVPN UI – Web Manager for OpenVPN Clients
 
 A simple, secure web interface to manage OpenVPN clients, built on top of an existing Easy-RSA setup.
@@ -7,7 +7,7 @@ It allows you to create, list, download and revoke OpenVPN client certificates w
 This project does not replace OpenVPN or Easy-RSA — it orchestrates them safely.
 
 ⸻
-```
+
 ✨ Features
 	•	🔐 HTTP Basic Auth (env-based credentials)
 	•	👤 Create OpenVPN clients via Easy-RSA
@@ -18,7 +18,7 @@ This project does not replace OpenVPN or Easy-RSA — it orchestrates them safel
 	•	🔁 Works behind NGINX reverse proxy
 	•	🐳 Docker-based deployment
 	•	🚫 No OpenVPN private paths exposed in UI
-```
+
 ⸻
 
 🧱 Architecture
@@ -43,8 +43,8 @@ ovpn-ui/
 ├── package.json
 ├── server.js
 └── README.md
-
-Server (outside container)
+```
+## Server (outside container)
 
 ⚠️ Paths must be adjusted to your server user
 ```
@@ -57,10 +57,10 @@ Server (outside container)
 ```
 ✅ Server Requirements
 
-Operating System
+## Operating System
 	•	Linux (Debian / Ubuntu recommended)
 
-Required Software
+## Required Software
 	•	Docker
 	•	OpenVPN (already configured)
 	•	Easy-RSA (already initialized)
