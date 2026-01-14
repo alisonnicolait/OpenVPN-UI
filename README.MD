@@ -47,7 +47,7 @@ Server (outside container)
 
 ⚠️ Paths must be adjusted to your server user
 
-/home/<USER>/
+/home/[<USER>]/
 ├── openvpn-ca/                     # Easy-RSA + PKI
 │   └── pki/
 ├── openvpn-clients/                # Generated .ovpn files
@@ -78,8 +78,8 @@ Before installing ovpn-ui, the server must already be working:
 
 Mandatory test (outside Docker):
 
-cd /home/<USER>/openvpn-ca
-/home/<USER>/ovpn-novo-cliente.container.sh test_manual
+cd /home/[<USER>]/openvpn-ca
+/home/[<USER>]/ovpn-novo-cliente.container.sh test_manual
 
 🐳 Docker Image Build
 
@@ -93,12 +93,12 @@ docker run -d --name ovpn-ui \
   -e UI_USER=admin \
   -e UI_PASS='STRONG_PASSWORD_HERE' \
   -e PORT=9001 \
-  -e OVPN_SCRIPT=/home/<USER>/ovpn-novo-cliente.container.sh \
-  -e OVPN_OUTDIR=/home/<USER>/openvpn-clients \
-  -v /home/<USER>/ovpn-novo-cliente.container.sh:/home/<USER>/ovpn-novo-cliente.container.sh:ro \
-  -v /home/<USER>/openvpn-clients:/home/<USER>/openvpn-clients \
-  -v /home/<USER>/openvpn-ca:/home/<USER>/openvpn-ca \
-  -w /home/<USER>/openvpn-ca \
+  -e OVPN_SCRIPT=/home/[<USER>]/ovpn-novo-cliente.container.sh \
+  -e OVPN_OUTDIR=/home/[<USER>]/openvpn-clients \
+  -v /home/[<USER>]/ovpn-novo-cliente.container.sh:/home/[<USER>]/ovpn-novo-cliente.container.sh:ro \
+  -v /home/[<USER>]/openvpn-clients:/home/[<USER>]/openvpn-clients \
+  -v /home/[<USER>]/openvpn-ca:/home/[<USER>]/openvpn-ca \
+  -w /home/[<USER>]/openvpn-ca \
   ovpn-ui:latest
 
 🌐 Web Routes
@@ -131,7 +131,7 @@ Returns all .ovpn files from OVPN_OUTDIR.
 GET /download?file=<filename>.ovpn
 
 ✅ File path is never exposed
-❌ Absolute paths like /home/<USER>/... are hidden
+❌ Absolute paths like /home/[<USER>]/... are hidden
 
 # Revoke Client
 
@@ -143,11 +143,11 @@ POST /revoke
 🧹 Removing Test Certificates
 
 ## List existing certs
-ls /home/<USER>/openvpn-ca/pki/issued
+ls /home/[<USER>]/openvpn-ca/pki/issued
 
 ## Remove a test client
 
-cd /home/<USER>/openvpn-ca
+cd /home/[<USER>]/openvpn-ca
 
 ./easyrsa revoke test_user
 ./easyrsa gen-crl
@@ -155,7 +155,7 @@ cd /home/<USER>/openvpn-ca
 rm -f pki/issued/test_user.crt
 rm -f pki/private/test_user.key
 rm -f pki/reqs/test_user.req
-rm -f /home/<USER>/openvpn-clients/test_user*.ovpn
+rm -f /home/[<USER>]/openvpn-clients/test_user*.ovpn
 
 Restart OpenVPN if required.
 
