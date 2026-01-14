@@ -1,0 +1,17 @@
+services:
+  ovpn-ui:
+    container_name: ovpn-ui
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "9001"
+      UI_USER: "admin"
+      UI_PASS: "SENHA FORTE AQUI"
+      OVPN_SCRIPT: "/host/ovpn-novo-cliente.sh"
+      OVPN_OUT_DIR: "/host/openvpn-clients"
+    ports:
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - /home/USUARIO DO SERVIDOR/ovpn-novo-cliente.sh:/host/ovpn-novo-cliente.sh:ro
+      - /home/USUARIO DO SERVIDOR/openvpn-clients:/host/openvpn-clients
+    user: "0:0"

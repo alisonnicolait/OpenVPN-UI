@@ -1,0 +1,16 @@
+# Node / app
+node_modules
+npm-debug.log
+.env
+
+# OpenVPN outputs / keys (NÃO versionar)
+*.ovpn
+openvpn-ca/
+pki/
+*.key
+*.crt
+*.pem
+ta.key
+
+# OS
+.DS_Store
