@@ -3,19 +3,19 @@ set -euo pipefail
 
 USER_NAME="${1:-}"
 if [[ -z "$USER_NAME" ]]; then
-  echo "Uso: sudo $0 NOME_USUARIO [IP_VPN_FIXO]"
+  echo "Uso: sudo $0 <USERNAME> [IP_VPN_FIXO]"
   echo "Ex.: sudo $0 usuario01 10.2.0.10"
   exit 1
 fi
 
 # === AJUSTE AQUI SE PRECISAR ===
-SERVER_PUBLIC_IP="DNS DO SERVIDOR"
+SERVER_PUBLIC_IP="<SERVER_PUBLIC_IP>"
 SERVER_PORT="2294"
-VPN_NET_PREFIX="IP DA VPN"
-DEFAULT_IP_START=10
+VPN_NET_PREFIX="<VPN_NET_PREFIX>"
+DEFAULT_IP_START="<DEFAULT_IP_START>"
 
-EASYRSA_DIR="/home/USUARIO DO SERVIDOR/openvpn-ca"
-CLIENT_OUT_DIR="/home/USUARIO DO SERVIDOR/openvpn-clients"
+EASYRSA_DIR="/home/<USER>/openvpn-ca"
+CLIENT_OUT_DIR="/home/<USER>/openvpn-clients"
 CCD_DIR="/etc/openvpn/ccd"
 
 BASE_CONF="${CLIENT_OUT_DIR}/base.conf"
