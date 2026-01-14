@@ -1,3 +1,4 @@
+
 OpenVPN UI – Web Manager for OpenVPN Clients
 
 A simple, secure web interface to manage OpenVPN clients, built on top of an existing Easy-RSA setup.
@@ -6,7 +7,7 @@ It allows you to create, list, download and revoke OpenVPN client certificates w
 This project does not replace OpenVPN or Easy-RSA — it orchestrates them safely.
 
 ⸻
-
+```
 ✨ Features
 	•	🔐 HTTP Basic Auth (env-based credentials)
 	•	👤 Create OpenVPN clients via Easy-RSA
@@ -17,7 +18,7 @@ This project does not replace OpenVPN or Easy-RSA — it orchestrates them safel
 	•	🔁 Works behind NGINX reverse proxy
 	•	🐳 Docker-based deployment
 	•	🚫 No OpenVPN private paths exposed in UI
-
+```
 ⸻
 
 🧱 Architecture
