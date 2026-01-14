@@ -209,10 +209,11 @@ function homeHtml(messageHtml = "") {
     <form method="POST" action="/create">
       <label>Usuário (CN)</label>
       <input name="username" placeholder="ex: suporte_01" required />
-      <div class="row" style="margin-top:12px">
-        <button class="btn btn-primary" type="submit">Gerar .ovpn</button>
-        <a class="btn btn-ghost" href="/clients">Ver todos</a>
-      </div>
+  <div class="row" style="margin-top:12px;flex-wrap:wrap">
+  <button class="btn btn-primary" type="submit">Gerar .ovpn</button>
+  <a class="btn btn-ghost" href="/clients">Ver todos</a>
+  <a class="btn btn-ghost" href="/connections">Conexões ativas</a>
+</div>
     </form>
 
     <div class="mut" style="margin-top:12px">
@@ -367,6 +368,88 @@ app.post("/revoke", auth, async (req, res) => {
   }
 });
 
+// ===== OpenVPN Connections (parse /run/openvpn/server.status) =====
+app.get("/connections", auth, (req, res) => {
+  const statusFile = process.env.OPENVPN_STATUS || "/run/openvpn/server.status";
+
+  if (!fs.existsSync(statusFile)) {
+    return res.status(500).type("html").send(page({
+      title: "OpenVPN - Conexões",
+      body: `<div class="card" style="grid-column:1/-1">
+        <div class="bad">Arquivo de status não encontrado.</div>
+        <div class="mut">Caminho esperado: <span class="file">${esc(statusFile)}</span></div>
+        <div class="mut" style="margin-top:8px">Monte no container com: <span class="file">-v ${esc(statusFile)}:${esc(statusFile)}:ro</span></div>
+      </div>`
+    }));
+  }
+
+  const txt = fs.readFileSync(statusFile, "utf8");
+  const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // pega timestamp "Updated,YYYY-MM-DD HH:MM:SS"
+  const updatedLine = lines.find(l => l.startsWith("Updated,"));
+  const updated = updatedLine ? updatedLine.split(",").slice(1).join(",") : "";
+
+  // seção CLIENT LIST (CSV)
+  const idxClientHeader = lines.findIndex(l => l.startsWith("Common Name,Real Address"));
+  const idxRouting = lines.findIndex(l => l === "ROUTING TABLE");
+
+  const clientRows = (idxClientHeader >= 0)
+    ? lines.slice(idxClientHeader + 1, idxRouting >= 0 ? idxRouting : lines.length)
+    : [];
+
+  const clients = clientRows
+    .filter(l => l.includes(","))
+    .map(l => {
+      const [name, real, rx, tx, since] = l.split(",");
+      return { name, real, rx, tx, since };
+    });
+
+  const body = `
+    <div class="card" style="grid-column:1/-1">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <h3 style="margin:0">Conexões ativas (${clients.length})</h3>
+          <div class="mut">Updated: ${esc(updated || "-")}</div>
+        </div>
+        <a class="btn btn-ghost" href="/">Voltar</a>
+      </div>
+
+      <div style="overflow:auto;margin-top:12px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left">
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Common Name</th>
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Real Address</th>
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Connected Since</th>
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">RX</th>
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">TX</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              clients.length
+                ? clients.map(c => `
+                  <tr>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="file">${esc(c.name)}</span></td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.real)}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.since)}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.rx)}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.tx)}</td>
+                  </tr>
+                `).join("")
+                : `<tr><td colspan="5" class="mut" style="padding:12px">Nenhum cliente conectado.</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  return res.type("html").send(page({ title: "OpenVPN - Conexões", body }));
+});
+
+// ===== Start Server =====
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`ovpn-ui on http://0.0.0.0:${PORT}`);
 });
