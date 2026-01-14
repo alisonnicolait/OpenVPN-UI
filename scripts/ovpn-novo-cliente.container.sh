@@ -6,8 +6,8 @@ set -e
 # ==============================
 CLIENT="$1"
 
-EASYRSA_DIR="/home/USUARIO DO SERVIDOR/openvpn-ca"
-OUTDIR="/home/USUARIO DO SERVIDOR/openvpn-clients"
+EASYRSA_DIR="/home/<USER>/openvpn-ca"
+OUTDIR="/home/<USER>/openvpn-clients"
 BASECONF="$OUTDIR/base.conf"
 
 if [ -z "$CLIENT" ]; then
