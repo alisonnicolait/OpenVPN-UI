@@ -176,9 +176,10 @@ function page({ title, body, note = "" }) {
   .dot{width:10px;height:10px;border-radius:50%;background:var(--pri);box-shadow:0 0 20px rgba(92,200,255,.6)}
   h1{font-size:20px;margin:0}
   .mut{color:var(--mut);font-size:13px;margin-top:4px}
-  .grid{display:grid;grid-template-columns:1fr;gap:14px}
-  @media(min-width:900px){ .grid{grid-template-columns: 1.1fr .9fr} }
-  .card{background:rgba(17,26,43,.85);border:1px solid var(--brd);border-radius:16px;padding:16px;backdrop-filter: blur(8px)}
+  /* minmax(0,..): sem isso, um nome de arquivo longo estica a coluna e espreme a pagina */
+  .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+  @media(min-width:900px){ .grid{grid-template-columns: minmax(0,1.1fr) minmax(0,.9fr)} }
+  .card{background:rgba(17,26,43,.85);border:1px solid var(--brd);border-radius:16px;padding:16px;backdrop-filter: blur(8px);min-width:0}
   label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
   input{width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--brd);background:#0c1424;color:var(--txt);outline:none}
   input:focus{border-color:rgba(92,200,255,.7);box-shadow:0 0 0 4px rgba(92,200,255,.08)}
@@ -192,7 +193,10 @@ function page({ title, body, note = "" }) {
   a{color:var(--pri);text-decoration:none}
   a:hover{text-decoration:underline}
   .list{margin:10px 0 0;padding:0;list-style:none}
-  .list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .list li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  /* o nome quebra em vez de forcar a largura; os controles nunca encolhem */
+  .list li > .file{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+  .list li > .actions{flex:0 0 auto;display:flex;gap:8px;align-items:center}
   .file{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;color:var(--txt)}
   .ok{color:var(--ok);font-weight:700}
   .bad{color:var(--bad);font-weight:700}
@@ -245,7 +249,7 @@ function ovpnListItem(file, revoked) {
   return `
     <li>
       <span class="file">${esc(file)}</span>
-      <span class="row" style="gap:8px;align-items:center">
+      <span class="actions">
         ${badge}
         <a href="/download?file=${encodeURIComponent(file)}">baixar</a>
         ${del}
