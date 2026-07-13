@@ -2,16 +2,28 @@ services:
   ovpn-ui:
     container_name: ovpn-ui
     build: .
+    image: ovpn-ui:latest
     restart: unless-stopped
     environment:
-      PORT: "9001"
       UI_USER: "admin"
       UI_PASS: "SENHA FORTE AQUI"
-      OVPN_SCRIPT: "/host/ovpn-novo-cliente.sh"
-      OVPN_OUT_DIR: "/host/openvpn-clients"
+      # OVPN_SCRIPT não é definido: usa o default /opt/scripts/ovpn-novo-cliente.container.sh
     ports:
-      - "127.0.0.1:9001:9001"
+      - "9001:9001"
     volumes:
-      - /home/USUARIO DO SERVIDOR/ovpn-novo-cliente.sh:/host/ovpn-novo-cliente.sh:ro
-      - /home/USUARIO DO SERVIDOR/openvpn-clients:/host/openvpn-clients
-    user: "0:0"
+      - /home/<USER>/openvpn-ca:/home/<USER>/openvpn-ca
+      - /home/<USER>/openvpn-clients:/home/<USER>/openvpn-clients
+      - /opt/ovpn-ui/scripts:/opt/scripts
+      - /run/openvpn/server.status:/run/openvpn/server.status:ro
+      - /etc/openvpn/ccd:/etc/openvpn/ccd
+    networks:
+      - iotalltech-net
+      - proxy
+
+networks:
+  iotalltech-net:
+    name: iotalltech-net
+    external: true
+  proxy:
+    name: proxy
+    external: true

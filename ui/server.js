@@ -22,7 +22,7 @@ const UI_PASS = process.env.UI_PASS || "admin";
 const PORT = Number(process.env.PORT || 9001);
 
 // script que gera o cliente (dentro do container)
-const SCRIPT = process.env.OVPN_SCRIPT || "/home/alison/ovpn-novo-cliente.container.sh";
+const SCRIPT = process.env.OVPN_SCRIPT || "/opt/scripts/ovpn-novo-cliente.container.sh";
 
 // pasta onde ficam os .ovpn (dentro do container)
 const OUT_DIR = process.env.OVPN_OUT_DIR || process.env.OVPN_OUT_DIR /* compat */ || "/home/alison/openvpn-clients";
@@ -38,19 +38,12 @@ const CRL_PATH = process.env.OVPN_CRL_OUT || path.join(WORKDIR, "pki", "crl.pem"
 const CRL_DEPLOY = process.env.OVPN_CRL_DEPLOY || "";
 
 // ===== Segurança / Proxy =====
-app.set("trust proxy", true); // importante quando está atrás do NGINX
+app.set("trust proxy", false); // sem trust proxy pra não quebrar o express-rate-limit
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.urlencoded({ extended: false }));
 
-app.use(
-  rateLimit({
-    windowMs: 60 * 1000,
-    limit: 120,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
+// rateLimit desativado (estava gerando ValidationError trust proxy)
 
 const auth = basicAuth({
   users: { [UI_USER]: UI_PASS },
