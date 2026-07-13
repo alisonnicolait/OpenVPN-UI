@@ -8,6 +8,8 @@ services:
       UI_USER: "admin"
       UI_PASS: "SENHA FORTE AQUI"
       # OVPN_SCRIPT não é definido: usa o default /opt/scripts/ovpn-novo-cliente.container.sh
+      # sem isto a CRL fica só no EasyRSA e a revogação não chega ao OpenVPN
+      OVPN_CRL_DEPLOY: "/etc/openvpn/crl.pem"
     ports:
       - "9001:9001"
     volumes:
@@ -17,6 +19,8 @@ services:
       # arquivo da diretiva "status" do server.conf (status-version 3)
       - /var/log/openvpn/openvpn-status.log:/run/openvpn/server.status:ro
       - /etc/openvpn/ccd:/etc/openvpn/ccd
+      # CRL lida pelo crl-verify do server.conf (montada rw: a UI escreve nela ao revogar)
+      - /etc/openvpn/crl.pem:/etc/openvpn/crl.pem
     networks:
       - iotalltech-net
       - proxy
