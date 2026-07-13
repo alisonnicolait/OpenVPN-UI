@@ -682,7 +682,16 @@ app.get("/connections", auth, (req, res) => {
       });
   }
 
-  const rows = clients.map(c => `
+  // Sessões sem identidade: o OpenVPN zera o Common Name quando a renegociação
+  // de TLS falha (típico de certificado revogado). O túnel ainda passa dados até
+  // a próxima troca de chave, mas não é um cliente válido conectado.
+  const revoked = revokedCNs();
+  const isUnknown = c => !c.name || c.name === "UNDEF";
+
+  const ativos = clients.filter(c => !isUnknown(c) && !revoked.has(c.name));
+  const encerrando = clients.filter(c => isUnknown(c) || revoked.has(c.name));
+
+  const rows = ativos.map(c => `
     <tr>
       <td><span class="name">${esc(c.name)}</span></td>
       <td class="mono">${esc(c.virtual || "—")}</td>
@@ -692,16 +701,43 @@ app.get("/connections", auth, (req, res) => {
       <td class="num">${esc(fmtBytes(c.tx))}</td>
     </tr>`).join("");
 
+  const encerrandoBloco = encerrando.length ? `
+    <div class="card-foot">
+      <details>
+        <summary>${encerrando.length} ${encerrando.length === 1 ? "sessão de acesso revogado ainda no ar" : "sessões de acesso revogado ainda no ar"}</summary>
+        <div class="hint" style="margin:8px 0">
+          Certificado revogado: o OpenVPN já recusou a renegociação (por isso alguns aparecem sem nome).
+          O túnel cai sozinho na próxima troca de chave; para cortar na hora, reinicie o serviço.
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Cliente</th><th>IP na VPN</th><th>Origem</th><th>Conectado desde</th></tr>
+            </thead>
+            <tbody>
+              ${encerrando.map(c => `
+                <tr>
+                  <td>${isUnknown(c) ? `<span class="mut">sem identificação</span>` : `<span class="name">${esc(c.name)}</span> <span class="status status-revoked">Revogado</span>`}</td>
+                  <td class="mono">${esc(c.virtual || "—")}</td>
+                  <td class="mono">${esc(c.real)}</td>
+                  <td class="num">${esc(c.since)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>` : "";
+
   const body = `
     <div class="card span-all">
       <div class="card-head">
-        <h2>${clients.length} ${clients.length === 1 ? "cliente conectado" : "clientes conectados"}</h2>
+        <h2>${ativos.length} ${ativos.length === 1 ? "cliente conectado" : "clientes conectados"}</h2>
         <span class="actions" style="margin:0">
           <span class="mut">Atualizado às ${esc(updated || "—")}</span>
           <a class="btn btn-default btn-sm" href="/connections">Atualizar</a>
         </span>
       </div>
-      ${clients.length ? `
+      ${ativos.length ? `
         <div class="table-scroll">
           <table>
             <thead>
@@ -717,6 +753,7 @@ app.get("/connections", auth, (req, res) => {
             <tbody>${rows}</tbody>
           </table>
         </div>` : `<div class="empty">Nenhum cliente conectado.</div>`}
+      ${encerrandoBloco}
     </div>
   `;
 
