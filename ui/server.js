@@ -100,6 +100,11 @@ function cnFromFile(file) {
   return String(file).replace(/\.ovpn$/i, "").split("__")[0];
 }
 
+function ipFromFile(file) {
+  const m = String(file).match(/__((?:\d{1,3}\.){3}\d{1,3})__/);
+  return m ? m[1] : "";
+}
+
 // CNs revogados segundo o index.txt do EasyRSA (linhas que começam com "R")
 function revokedCNs() {
   const set = new Set();
@@ -156,7 +161,19 @@ async function revokeClient(username) {
 }
 
 // ===== UI (HTML inline) =====
-function page({ title, body, note = "" }) {
+function page({ title, heading, subtitle = "", body, active = "", back = null }) {
+  const tab = (href, label) =>
+    `<a class="tab${active === href ? " is-active" : ""}" href="${href}">${label}</a>`;
+
+  const backLink = back
+    ? `<a class="back" href="${back.href}">
+         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+           <path d="M10 3 5 8l5 5"/>
+         </svg>
+         ${esc(back.label)}
+       </a>`
+    : "";
+
   return `<!doctype html>
 <html lang="pt-br">
 <head>
@@ -165,143 +182,266 @@ function page({ title, body, note = "" }) {
 <title>${esc(title)}</title>
 <style>
   :root{
-    --bg:#0b1220; --card:#111a2b; --txt:#e7edf7; --mut:#9fb0c8;
-    --pri:#5cc8ff; --ok:#46d17d; --bad:#ff5c7a; --brd:rgba(255,255,255,.10);
+    --bg:#f6f7f9; --surface:#fff; --surface-2:#fbfcfd;
+    --txt:#16202c; --mut:#657084; --brd:#e2e6ec;
+    --acc:#1f5fd6; --acc-weak:#eef3fd;
+    --ok:#12704f; --ok-weak:#e8f5f0;
+    --bad:#a52320; --bad-weak:#fdeceb;
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1319; --surface:#161b23; --surface-2:#1b212a;
+      --txt:#e6e9ee; --mut:#9aa4b2; --brd:#2a323d;
+      --acc:#6ea8fe; --acc-weak:#1b2739;
+      --ok:#5fd0a0; --ok-weak:#16281f;
+      --bad:#f28b82; --bad-weak:#2c1d1d;
+    }
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;background:linear-gradient(180deg,#070b14,var(--bg));color:var(--txt)}
-  .wrap{max-width:980px;margin:40px auto;padding:0 16px}
-  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-  .brand{display:flex;align-items:center;gap:12px}
-  .dot{width:10px;height:10px;border-radius:50%;background:var(--pri);box-shadow:0 0 20px rgba(92,200,255,.6)}
-  h1{font-size:20px;margin:0}
-  .mut{color:var(--mut);font-size:13px;margin-top:4px}
-  /* minmax(0,..): sem isso, um nome de arquivo longo estica a coluna e espreme a pagina */
-  .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
-  @media(min-width:900px){ .grid{grid-template-columns: minmax(0,1.1fr) minmax(0,.9fr)} }
-  .card{background:rgba(17,26,43,.85);border:1px solid var(--brd);border-radius:16px;padding:16px;backdrop-filter: blur(8px);min-width:0}
-  label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
-  input{width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--brd);background:#0c1424;color:var(--txt);outline:none}
-  input:focus{border-color:rgba(92,200,255,.7);box-shadow:0 0 0 4px rgba(92,200,255,.08)}
-  .row{display:flex;gap:10px;align-items:center}
-  .btn{appearance:none;border:0;border-radius:12px;padding:12px 14px;font-weight:600;cursor:pointer}
-  .btn-primary{background:linear-gradient(180deg,rgba(92,200,255,.95),rgba(92,200,255,.70));color:#07101f}
-  .btn-ghost{background:transparent;border:1px solid var(--brd);color:var(--txt)}
-  .btn-danger{background:linear-gradient(180deg,rgba(255,92,122,.95),rgba(255,92,122,.70));color:#1b0710}
-  .btn:disabled{opacity:.6;cursor:not-allowed}
-  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--brd);background:rgba(12,20,36,.6);border-radius:999px;padding:8px 10px;color:var(--mut);font-size:12px}
-  a{color:var(--pri);text-decoration:none}
-  a:hover{text-decoration:underline}
-  .list{margin:10px 0 0;padding:0;list-style:none}
-  .list li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
-  /* o nome quebra em vez de forcar a largura; os controles nunca encolhem */
-  .list li > .file{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
-  .list li > .actions{flex:0 0 auto;display:flex;gap:8px;align-items:center}
-  .file{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;color:var(--txt)}
-  .ok{color:var(--ok);font-weight:700}
-  .bad{color:var(--bad);font-weight:700}
-  pre{white-space:pre-wrap;background:#0c1424;border:1px solid var(--brd);border-radius:12px;padding:12px;color:var(--txt);font-size:12px;overflow:auto}
+  body{
+    margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  header{border-bottom:1px solid var(--brd);background:var(--surface)}
+  .header-in{display:flex;align-items:center;justify-content:space-between;gap:16px;height:56px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.01em}
+  .brand svg{display:block;color:var(--mut)}
+  .nav{display:flex;gap:4px}
+  .tab{
+    display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:6px;
+    color:var(--mut);text-decoration:none;font-weight:500;
+  }
+  .tab:hover{background:var(--surface-2);color:var(--txt)}
+  .tab.is-active{background:var(--acc-weak);color:var(--acc)}
+
+  main{padding:28px 0 40px}
+  .page-head{margin-bottom:20px}
+  .back{display:inline-flex;align-items:center;gap:4px;color:var(--mut);text-decoration:none;font-size:13px;font-weight:500;margin-bottom:10px}
+  .back:hover{color:var(--txt)}
+  h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}
+  .sub{color:var(--mut);margin-top:4px}
+  h2{margin:0;font-size:15px;font-weight:600}
+
+  /* minmax(0,..): sem isso um nome de arquivo longo estica a coluna e espreme a pagina */
+  .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+  @media(min-width:900px){ .grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} }
+  .span-all{grid-column:1/-1}
+
+  .card{background:var(--surface);border:1px solid var(--brd);border-radius:var(--radius);min-width:0}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--brd)}
+  .card-body{padding:16px}
+  .card-foot{padding:12px 16px;border-top:1px solid var(--brd);color:var(--mut);font-size:13px;background:var(--surface-2);border-radius:0 0 var(--radius) var(--radius)}
+
+  label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+  input{
+    width:100%;height:36px;padding:0 10px;border:1px solid var(--brd);border-radius:6px;
+    background:var(--surface);color:var(--txt);font:inherit;outline:none;
+  }
+  input:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-weak)}
+  .hint{color:var(--mut);font-size:13px;margin-top:8px}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    height:36px;padding:0 14px;border-radius:6px;border:1px solid transparent;
+    font:inherit;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;
+  }
+  .btn-primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  .btn-primary:hover{filter:brightness(.94)}
+  .btn-default{background:var(--surface);border-color:var(--brd);color:var(--txt)}
+  .btn-default:hover{background:var(--surface-2)}
+  .btn-danger{background:var(--surface);border-color:var(--brd);color:var(--bad)}
+  .btn-danger:hover{background:var(--bad-weak);border-color:var(--bad)}
+  .btn-sm{height:28px;padding:0 10px;font-size:13px}
+
+  table{width:100%;border-collapse:collapse}
+  th{
+    text-align:left;padding:10px 16px;border-bottom:1px solid var(--brd);
+    font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
+  }
+  td{padding:12px 16px;border-bottom:1px solid var(--brd);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--surface-2)}
+  .num{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--mut)}
+  .col-actions{text-align:right;white-space:nowrap}
+  .table-scroll{overflow-x:auto}
+  .empty{padding:24px 16px;color:var(--mut);text-align:center}
+
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;overflow-wrap:anywhere}
+  .name{font-weight:500}
+  .mut{color:var(--mut)}
+
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;
+    padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .status-ok{color:var(--ok);background:var(--ok-weak)}
+  .status-revoked{color:var(--bad);background:var(--bad-weak)}
+
+  .alert{border:1px solid var(--brd);border-left-width:3px;border-radius:6px;padding:12px 14px;margin-bottom:16px;background:var(--surface)}
+  .alert-ok{border-left-color:var(--ok)}
+  .alert-bad{border-left-color:var(--bad)}
+  .alert-title{font-weight:600}
+  .alert .hint{margin-top:4px}
+
+  details{margin-top:10px}
+  summary{cursor:pointer;color:var(--mut);font-size:13px}
+  pre{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--brd);border-radius:6px;padding:12px;font-size:12px;overflow:auto;margin:8px 0 0}
+  a{color:var(--acc)}
+
+  footer{border-top:1px solid var(--brd);padding:16px 0;color:var(--mut);font-size:13px}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
+  <header>
+    <div class="shell header-in">
       <div class="brand">
-        <div class="dot"></div>
-        <div>
-          <h1>${esc(title)}</h1>
-          <div class="mut">VPN • geração e revogação de clientes</div>
-        </div>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M8 1.5 13.5 4v3.8c0 3.2-2.3 5.7-5.5 6.7-3.2-1-5.5-3.5-5.5-6.7V4L8 1.5Z"/>
+        </svg>
+        OpenVPN
       </div>
-     <div class="pill">Download servido por <b style="color:var(--txt);margin-left:6px">/openvpn-clients</b></div>
+      <nav class="nav">
+        ${tab("/", "Clientes")}
+        ${tab("/connections", "Conexões")}
+      </nav>
     </div>
+  </header>
 
-    ${note ? `<div class="card" style="border-color:rgba(92,200,255,.35)">${note}</div>` : ""}
-
+  <main class="shell">
+    <div class="page-head">
+      ${backLink}
+      <h1>${esc(heading)}</h1>
+      ${subtitle ? `<div class="sub">${subtitle}</div>` : ""}
+    </div>
     <div class="grid">
       ${body}
     </div>
+  </main>
 
-    <div class="mut" style="margin-top:16px">
-      Desenvolvido por Wizis Intermediações e Negócios Ltda.
-    </div>
+  <div class="shell">
+    <footer>Wizis Intermediações e Negócios Ltda.</footer>
   </div>
 </body>
 </html>`;
 }
 
-// item da lista de .ovpn: marca revogados e oferece deletar só para eles
-function ovpnListItem(file, revoked) {
+// linha da tabela de clientes: marca revogados e oferece deletar só para eles
+function clientRow(file, revoked) {
   const cn = cnFromFile(file);
+  const ip = ipFromFile(file);
   const isRevoked = revoked.has(cn);
 
-  const badge = isRevoked
-    ? `<span class="pill" style="padding:2px 8px;color:var(--bad)">revogado</span>`
-    : `<span class="pill" style="padding:2px 8px;color:var(--ok)">ativo</span>`;
+  const status = isRevoked
+    ? `<span class="status status-revoked">Revogado</span>`
+    : `<span class="status status-ok">Ativo</span>`;
 
   const del = isRevoked ? `
     <form method="POST" action="/delete" style="display:inline"
-          onsubmit="return confirm('Deletar o .ovpn e o CCD de ${esc(cn)}? O certificado continua revogado.')">
+          onsubmit="return confirm('Excluir o perfil .ovpn e o IP fixo de ${esc(cn)}?\\n\\nO certificado permanece revogado.')">
       <input type="hidden" name="username" value="${esc(cn)}" />
-      <button class="btn btn-danger" style="padding:4px 10px" type="submit">deletar</button>
+      <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
     </form>` : "";
 
   return `
-    <li>
-      <span class="file">${esc(file)}</span>
-      <span class="actions">
-        ${badge}
-        <a href="/download?file=${encodeURIComponent(file)}">baixar</a>
-        ${del}
-      </span>
-    </li>`;
+    <tr>
+      <td><span class="name">${esc(cn)}</span><div class="mut mono" style="font-size:12px">${esc(file)}</div></td>
+      <td class="mono">${esc(ip || "—")}</td>
+      <td>${status}</td>
+      <td class="col-actions">
+        <span class="actions" style="margin:0;justify-content:flex-end">
+          <a class="btn btn-default btn-sm" href="/download?file=${encodeURIComponent(file)}">Baixar</a>
+          ${del}
+        </span>
+      </td>
+    </tr>`;
+}
+
+function clientsTable(files, revoked) {
+  if (!files.length) {
+    return `<div class="empty">Nenhum cliente emitido.</div>`;
+  }
+  return `
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>IP fixo</th>
+            <th>Status</th>
+            <th class="col-actions">Ações</th>
+          </tr>
+        </thead>
+        <tbody>${files.map(f => clientRow(f, revoked)).join("")}</tbody>
+      </table>
+    </div>`;
+}
+
+function alert({ ok = true, title, detail = "", details = "" }) {
+  return `
+    <div class="alert ${ok ? "alert-ok" : "alert-bad"}">
+      <div class="alert-title">${title}</div>
+      ${detail ? `<div class="hint">${detail}</div>` : ""}
+      ${details ? `<details><summary>Detalhes técnicos</summary><pre>${esc(details)}</pre></details>` : ""}
+    </div>`;
 }
 
 function homeHtml(messageHtml = "") {
-  const files = listOvpnFiles().slice(0, 15);
+  const all = listOvpnFiles();
   const revoked = revokedCNs();
+  const recent = all.slice(0, 8);
+  const nRevoked = all.filter(f => revoked.has(cnFromFile(f))).length;
 
-  const left = `
+  const emitir = `
   <div class="card">
-    <h3 style="margin:0 0 10px">Gerar cliente</h3>
-    <form method="POST" action="/create">
-      <label>Usuário (CN)</label>
-      <input name="username" placeholder="ex: suporte_01" required />
-  <div class="row" style="margin-top:12px;flex-wrap:wrap">
-  <button class="btn btn-primary" type="submit">Gerar .ovpn</button>
-  <a class="btn btn-ghost" href="/clients">Ver todos</a>
-  <a class="btn btn-ghost" href="/connections">Conexões ativas</a>
-</div>
-    </form>
-
-    <div class="mut" style="margin-top:12px">
-      O resultado não mostra caminhos do servidor. Você baixa pelo link gerado.
+    <div class="card-head"><h2>Emitir cliente</h2></div>
+    <div class="card-body">
+      <form method="POST" action="/create">
+        <label for="cn-novo">Nome do cliente (CN)</label>
+        <input id="cn-novo" name="username" placeholder="suporte_01" autocomplete="off" required />
+        <div class="hint">Recebe o próximo IP fixo livre e um perfil .ovpn para download.</div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Emitir perfil</button>
+        </div>
+      </form>
     </div>
-
-    ${messageHtml ? `<div style="margin-top:12px">${messageHtml}</div>` : ""}
   </div>`;
 
-  const right = `
+  const revogar = `
   <div class="card">
-    <h3 style="margin:0 0 10px">Últimos arquivos</h3>
-    <ul class="list">
-      ${files.map(f => ovpnListItem(f, revoked)).join("") || `<li class="mut">Nenhum .ovpn encontrado.</li>`}
-    </ul>
-
-    <h3 style="margin:14px 0 10px">Revogar</h3>
-    <form method="POST" action="/revoke">
-      <label>Usuário (CN) para revogar</label>
-      <input name="username" placeholder="ex: suporte_01" required />
-      <div class="row" style="margin-top:12px">
-        <button class="btn btn-danger" type="submit">Revogar</button>
-      </div>
-      <div class="mut" style="margin-top:10px">
-        Revogação gera um novo <b>crl.pem</b>. Se o OpenVPN estiver configurado com <b>crl-verify</b>, ele passa a bloquear o cliente revogado.
-      </div>
-    </form>
+    <div class="card-head"><h2>Revogar acesso</h2></div>
+    <div class="card-body">
+      <form method="POST" action="/revoke">
+        <label for="cn-revoga">Nome do cliente (CN)</label>
+        <input id="cn-revoga" name="username" placeholder="suporte_01" autocomplete="off" required />
+        <div class="hint">O certificado entra na CRL e o cliente deixa de conectar. Sessões abertas caem na próxima renegociação.</div>
+        <div class="actions">
+          <button class="btn btn-danger" type="submit">Revogar</button>
+        </div>
+      </form>
+    </div>
   </div>`;
 
-  return page({ title: "OpenVPN - Clientes", body: left + right });
+  const lista = `
+  <div class="card span-all">
+    <div class="card-head">
+      <h2>Clientes recentes</h2>
+      <a class="btn btn-default btn-sm" href="/clients">Ver todos (${all.length})</a>
+    </div>
+    ${clientsTable(recent, revoked)}
+    ${nRevoked ? `<div class="card-foot">${nRevoked} de ${all.length} ${nRevoked === 1 ? "perfil está revogado" : "perfis estão revogados"} e ${nRevoked === 1 ? "pode" : "podem"} ser ${nRevoked === 1 ? "excluído" : "excluídos"}.</div>` : ""}
+  </div>`;
+
+  return page({
+    title: "Clientes · OpenVPN",
+    heading: "Clientes",
+    subtitle: "Emissão, revogação e download de perfis.",
+    body: (messageHtml ? `<div class="span-all">${messageHtml}</div>` : "") + emitir + revogar + lista,
+    active: "/",
+  });
 }
 
 // ===== Routes =====
@@ -313,7 +453,7 @@ app.post("/create", auth, async (req, res) => {
   const username = String(req.body.username || "").trim();
 
   if (!validUsername(username)) {
-    return res.status(400).type("html").send(homeHtml(`<div class="bad">Usuário inválido.</div>`));
+    return res.status(400).type("html").send(homeHtml(alert({ ok: false, title: "Nome de cliente inválido." })));
   }
 
   try {
@@ -323,11 +463,13 @@ app.post("/create", auth, async (req, res) => {
     // pega o mais recente desse usuário
     const newest = files[0];
 
-    const msg = `
-      <div class="ok">Gerado com sucesso.</div>
-      ${newest ? `<div class="mut" style="margin-top:6px"><a href="/download?file=${encodeURIComponent(newest)}">Baixar ${esc(newest)}</a></div>` : ""}
-      ${stderr ? `<details style="margin-top:10px"><summary class="mut">ver detalhes</summary><pre>${esc(stderr)}</pre></details>` : ""}
-    `;
+    const msg = alert({
+      title: `Perfil emitido para ${esc(username)}.`,
+      detail: newest
+        ? `<a href="/download?file=${encodeURIComponent(newest)}">Baixar ${esc(newest)}</a>`
+        : "",
+      details: stderr,
+    });
 
     return res.type("html").send(homeHtml(msg));
   } catch (err) {
@@ -335,14 +477,12 @@ app.post("/create", auth, async (req, res) => {
     const stdout = err?._stdout || "";
     const stderr = err?._stderr || "";
 
-    const msg = `
-      <div class="bad">Falha ao gerar.</div>
-      <div class="mut">code=${esc(code)}</div>
-      <details style="margin-top:10px" open>
-        <summary class="mut">detalhes</summary>
-        <pre>${esc(stderr || stdout || String(err))}</pre>
-      </details>
-    `;
+    const msg = alert({
+      ok: false,
+      title: "Falha ao emitir o perfil.",
+      detail: `Código ${esc(code)}.`,
+      details: stderr || stdout || String(err),
+    });
     return res.status(500).type("html").send(homeHtml(msg));
   }
 });
@@ -350,24 +490,26 @@ app.post("/create", auth, async (req, res) => {
 app.get("/clients", auth, (req, res) => {
   const files = listOvpnFiles();
   const revoked = revokedCNs();
-  const items = files.map(f => ovpnListItem(f, revoked)).join("");
-
   const nRevoked = files.filter(f => revoked.has(cnFromFile(f))).length;
 
   const body = `
-    <div class="card" style="grid-column:1/-1">
-      <div class="row" style="justify-content:space-between">
-        <h3 style="margin:0">Arquivos .ovpn (${files.length}${nRevoked ? ` &middot; ${nRevoked} revogado(s)` : ""})</h3>
-        <a class="btn btn-ghost" href="/">Voltar</a>
+    <div class="card span-all">
+      <div class="card-head">
+        <h2>${files.length} ${files.length === 1 ? "perfil" : "perfis"}</h2>
+        <a class="btn btn-default btn-sm" href="/">Emitir cliente</a>
       </div>
-      <ul class="list" style="margin-top:10px">${items || `<li class="mut">Nenhum arquivo.</li>`}</ul>
+      ${clientsTable(files, revoked)}
+      ${nRevoked ? `<div class="card-foot">${nRevoked} ${nRevoked === 1 ? "revogado" : "revogados"}. Excluir remove o perfil e libera o IP fixo; o certificado segue revogado na CRL.</div>` : ""}
     </div>
   `;
 
   return res.type("html").send(page({
-    title: "OpenVPN - Lista de clientes",
+    title: "Clientes · OpenVPN",
+    heading: "Todos os clientes",
+    subtitle: "Perfis emitidos, com status de revogação.",
     body,
-    note: "Downloads",
+    active: "/",
+    back: { href: "/", label: "Voltar" },
   }));
 });
 
@@ -392,13 +534,16 @@ app.post("/delete", auth, (req, res) => {
   const username = String(req.body.username || "").trim();
 
   if (!validUsername(username)) {
-    return res.status(400).type("html").send(homeHtml(`<div class="bad">Usuário inválido.</div>`));
+    return res.status(400).type("html").send(homeHtml(alert({ ok: false, title: "Nome de cliente inválido." })));
   }
 
   if (!revokedCNs().has(username)) {
     return res.status(400).type("html").send(homeHtml(
-      `<div class="bad">Só é possível deletar clientes revogados.</div>
-       <div class="mut" style="margin-top:6px">Revogue <span class="file">${esc(username)}</span> antes de deletar.</div>`
+      alert({
+        ok: false,
+        title: "Só é possível excluir clientes revogados.",
+        detail: `Revogue <span class="mono">${esc(username)}</span> antes de excluir o perfil.`,
+      })
     ));
   }
 
@@ -419,15 +564,16 @@ app.post("/delete", auth, (req, res) => {
     }
   } catch (err) {
     return res.status(500).type("html").send(homeHtml(
-      `<div class="bad">Falha ao deletar.</div><pre>${esc(maskPaths(String(err)))}</pre>`
+      alert({ ok: false, title: "Falha ao excluir.", details: maskPaths(String(err)) })
     ));
   }
 
   const msg = removed.length
-    ? `<div class="ok">Deletado.</div>
-       <div class="mut" style="margin-top:6px">Removido: ${removed.map(r => `<span class="file">${esc(r)}</span>`).join(", ")}</div>
-       <div class="mut" style="margin-top:6px">O certificado continua revogado na CRL.</div>`
-    : `<div class="mut">Nada a remover para <span class="file">${esc(username)}</span>.</div>`;
+    ? alert({
+        title: `Perfil de ${esc(username)} excluído.`,
+        detail: `Removido: ${removed.map(r => `<span class="mono">${esc(r)}</span>`).join(", ")}. O certificado continua revogado na CRL.`,
+      })
+    : alert({ ok: false, title: `Nada a remover para ${esc(username)}.` });
 
   return res.type("html").send(homeHtml(msg));
 });
@@ -436,33 +582,30 @@ app.post("/revoke", auth, async (req, res) => {
   const username = String(req.body.username || "").trim();
 
   if (!validUsername(username)) {
-    return res.status(400).type("html").send(homeHtml(`<div class="bad">Usuário inválido.</div>`));
+    return res.status(400).type("html").send(homeHtml(alert({ ok: false, title: "Nome de cliente inválido." })));
   }
 
   try {
     await revokeClient(username);
 
-    const note = `
-      <div class="ok">Revogado com sucesso: ${esc(username)}</div>
-      <div class="mut" style="margin-top:6px">
-        CRL atualizada. Se seu OpenVPN usa <b>crl-verify</b>, o cliente passa a ser bloqueado.
-      </div>
-      ${CRL_DEPLOY ? `<div class="mut" style="margin-top:6px">CRL aplicada em: <span class="file">${esc(CRL_DEPLOY)}</span></div>` : ""}
-    `;
+    const note = alert({
+      title: `${esc(username)} revogado.`,
+      detail: CRL_DEPLOY
+        ? "A CRL foi atualizada e aplicada no OpenVPN. Novas conexões desse certificado são recusadas; sessões abertas caem na próxima renegociação."
+        : "A CRL foi atualizada, mas <b>OVPN_CRL_DEPLOY</b> não está definido — ela não foi aplicada no OpenVPN e a revogação não terá efeito.",
+    });
     return res.type("html").send(homeHtml(note));
   } catch (err) {
     const code = err?.code ?? "ERR";
     const stdout = err?._stdout || "";
     const stderr = err?._stderr || "";
 
-    const msg = `
-      <div class="bad">Falha ao revogar.</div>
-      <div class="mut">code=${esc(code)}</div>
-      <details style="margin-top:10px" open>
-        <summary class="mut">detalhes</summary>
-        <pre>${esc(stderr || stdout || String(err))}</pre>
-      </details>
-    `;
+    const msg = alert({
+      ok: false,
+      title: "Falha ao revogar.",
+      detail: `Código ${esc(code)}.`,
+      details: stderr || stdout || String(err),
+    });
     return res.status(500).type("html").send(homeHtml(msg));
   }
 });
@@ -473,12 +616,15 @@ app.get("/connections", auth, (req, res) => {
 
   if (!fs.existsSync(statusFile)) {
     return res.status(500).type("html").send(page({
-      title: "OpenVPN - Conexões",
-      body: `<div class="card" style="grid-column:1/-1">
-        <div class="bad">Arquivo de status não encontrado.</div>
-        <div class="mut">Caminho esperado: <span class="file">${esc(statusFile)}</span></div>
-        <div class="mut" style="margin-top:8px">Monte no container com: <span class="file">-v ${esc(statusFile)}:${esc(statusFile)}:ro</span></div>
-      </div>`
+      title: "Conexões · OpenVPN",
+      heading: "Conexões",
+      active: "/connections",
+      back: { href: "/", label: "Voltar" },
+      body: `<div class="span-all">${alert({
+        ok: false,
+        title: "Arquivo de status do OpenVPN não encontrado.",
+        detail: `Esperado em <span class="mono">${esc(statusFile)}</span>. Monte no container o arquivo indicado pela diretiva <b>status</b> do server.conf.`,
+      })}</div>`,
     }));
   }
 
@@ -536,50 +682,52 @@ app.get("/connections", auth, (req, res) => {
       });
   }
 
-  const body = `
-    <div class="card" style="grid-column:1/-1">
-      <div class="row" style="justify-content:space-between;align-items:flex-end">
-        <div>
-          <h3 style="margin:0">Conexões ativas (${clients.length})</h3>
-          <div class="mut">Updated: ${esc(updated || "-")}</div>
-        </div>
-        <a class="btn btn-ghost" href="/">Voltar</a>
-      </div>
+  const rows = clients.map(c => `
+    <tr>
+      <td><span class="name">${esc(c.name)}</span></td>
+      <td class="mono">${esc(c.virtual || "—")}</td>
+      <td class="mono">${esc(c.real)}</td>
+      <td class="num">${esc(c.since)}</td>
+      <td class="num">${esc(fmtBytes(c.rx))}</td>
+      <td class="num">${esc(fmtBytes(c.tx))}</td>
+    </tr>`).join("");
 
-      <div style="overflow:auto;margin-top:12px">
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="text-align:left">
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Common Name</th>
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Real Address</th>
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Virtual Address</th>
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Connected Since</th>
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">RX</th>
-              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">TX</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              clients.length
-                ? clients.map(c => `
-                  <tr>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="file">${esc(c.name)}</span></td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.real)}</td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="file">${esc(c.virtual || "-")}</span></td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.since)}</td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(fmtBytes(c.rx))}</td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(fmtBytes(c.tx))}</td>
-                  </tr>
-                `).join("")
-                : `<tr><td colspan="6" class="mut" style="padding:12px">Nenhum cliente conectado.</td></tr>`
-            }
-          </tbody>
-        </table>
+  const body = `
+    <div class="card span-all">
+      <div class="card-head">
+        <h2>${clients.length} ${clients.length === 1 ? "cliente conectado" : "clientes conectados"}</h2>
+        <span class="actions" style="margin:0">
+          <span class="mut">Atualizado às ${esc(updated || "—")}</span>
+          <a class="btn btn-default btn-sm" href="/connections">Atualizar</a>
+        </span>
       </div>
+      ${clients.length ? `
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>IP na VPN</th>
+                <th>Origem</th>
+                <th>Conectado desde</th>
+                <th>Recebido</th>
+                <th>Enviado</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>` : `<div class="empty">Nenhum cliente conectado.</div>`}
     </div>
   `;
 
-  return res.type("html").send(page({ title: "OpenVPN - Conexões", body }));
+  return res.type("html").send(page({
+    title: "Conexões · OpenVPN",
+    heading: "Conexões",
+    subtitle: "Sessões abertas no servidor OpenVPN.",
+    body,
+    active: "/connections",
+    back: { href: "/", label: "Voltar" },
+  }));
 });
 
 // ===== Start Server =====
