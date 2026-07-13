@@ -39,6 +39,12 @@ const OUT_DIR = process.env.OVPN_OUT_DIR || process.env.OVPN_OUT_DIR /* compat *
 // diretório do EasyRSA (onde tem ./easyrsa e pki/)
 const WORKDIR = process.env.OVPN_WORKDIR || "/home/alison/openvpn-ca";
 
+// index.txt do EasyRSA: fonte da verdade sobre quem está revogado
+const INDEX_PATH = process.env.OVPN_INDEX || path.join(WORKDIR, "pki", "index.txt");
+
+// CCDs (IP fixo por cliente); removidos junto com o .ovpn ao deletar
+const CCD_DIR = process.env.OVPN_CCD_DIR || "/etc/openvpn/ccd";
+
 // CRL gerada pelo EasyRSA
 const CRL_PATH = process.env.OVPN_CRL_OUT || path.join(WORKDIR, "pki", "crl.pem");
 
@@ -87,6 +93,24 @@ function listOvpnFiles() {
 function listOvpnForUser(username) {
   const files = listOvpnFiles().filter(f => f.toLowerCase().startsWith(username.toLowerCase()));
   return files;
+}
+
+// nome do arquivo é "CN__IP__host_port.ovpn"
+function cnFromFile(file) {
+  return String(file).replace(/\.ovpn$/i, "").split("__")[0];
+}
+
+// CNs revogados segundo o index.txt do EasyRSA (linhas que começam com "R")
+function revokedCNs() {
+  const set = new Set();
+  try {
+    for (const line of fs.readFileSync(INDEX_PATH, "utf8").split("\n")) {
+      if (!line.startsWith("R")) continue;
+      const m = line.match(/\/CN=([^/\s]+)/);
+      if (m) set.add(m[1]);
+    }
+  } catch { /* sem index.txt: ninguém é marcado como revogado */ }
+  return set;
 }
 
 function runCmd(cmd, args, opts = {}) {
@@ -202,8 +226,36 @@ function page({ title, body, note = "" }) {
 </html>`;
 }
 
+// item da lista de .ovpn: marca revogados e oferece deletar só para eles
+function ovpnListItem(file, revoked) {
+  const cn = cnFromFile(file);
+  const isRevoked = revoked.has(cn);
+
+  const badge = isRevoked
+    ? `<span class="pill" style="padding:2px 8px;color:var(--bad)">revogado</span>`
+    : `<span class="pill" style="padding:2px 8px;color:var(--ok)">ativo</span>`;
+
+  const del = isRevoked ? `
+    <form method="POST" action="/delete" style="display:inline"
+          onsubmit="return confirm('Deletar o .ovpn e o CCD de ${esc(cn)}? O certificado continua revogado.')">
+      <input type="hidden" name="username" value="${esc(cn)}" />
+      <button class="btn btn-danger" style="padding:4px 10px" type="submit">deletar</button>
+    </form>` : "";
+
+  return `
+    <li>
+      <span class="file">${esc(file)}</span>
+      <span class="row" style="gap:8px;align-items:center">
+        ${badge}
+        <a href="/download?file=${encodeURIComponent(file)}">baixar</a>
+        ${del}
+      </span>
+    </li>`;
+}
+
 function homeHtml(messageHtml = "") {
   const files = listOvpnFiles().slice(0, 15);
+  const revoked = revokedCNs();
 
   const left = `
   <div class="card">
@@ -229,11 +281,7 @@ function homeHtml(messageHtml = "") {
   <div class="card">
     <h3 style="margin:0 0 10px">Últimos arquivos</h3>
     <ul class="list">
-      ${files.map(f => `
-        <li>
-          <span class="file">${esc(f)}</span>
-          <a href="/download?file=${encodeURIComponent(f)}">baixar</a>
-        </li>`).join("") || `<li class="mut">Nenhum .ovpn encontrado.</li>`}
+      ${files.map(f => ovpnListItem(f, revoked)).join("") || `<li class="mut">Nenhum .ovpn encontrado.</li>`}
     </ul>
 
     <h3 style="margin:14px 0 10px">Revogar</h3>
@@ -297,16 +345,15 @@ app.post("/create", auth, async (req, res) => {
 
 app.get("/clients", auth, (req, res) => {
   const files = listOvpnFiles();
-  const items = files.map(f => `
-    <li>
-      <span class="file">${esc(f)}</span>
-      <a href="/download?file=${encodeURIComponent(f)}">baixar</a>
-    </li>`).join("");
+  const revoked = revokedCNs();
+  const items = files.map(f => ovpnListItem(f, revoked)).join("");
+
+  const nRevoked = files.filter(f => revoked.has(cnFromFile(f))).length;
 
   const body = `
     <div class="card" style="grid-column:1/-1">
       <div class="row" style="justify-content:space-between">
-        <h3 style="margin:0">Arquivos .ovpn (${files.length})</h3>
+        <h3 style="margin:0">Arquivos .ovpn (${files.length}${nRevoked ? ` &middot; ${nRevoked} revogado(s)` : ""})</h3>
         <a class="btn btn-ghost" href="/">Voltar</a>
       </div>
       <ul class="list" style="margin-top:10px">${items || `<li class="mut">Nenhum arquivo.</li>`}</ul>
@@ -333,6 +380,52 @@ app.get("/download", auth, (req, res) => {
   if (!fs.existsSync(full)) return res.status(404).send("Não encontrado.");
 
   return res.download(full, file);
+});
+
+// Deleta os artefatos de um cliente JÁ REVOGADO: o(s) .ovpn e o CCD (libera o IP).
+// Não toca no PKI: o certificado segue revogado na CRL e no index.txt.
+app.post("/delete", auth, (req, res) => {
+  const username = String(req.body.username || "").trim();
+
+  if (!validUsername(username)) {
+    return res.status(400).type("html").send(homeHtml(`<div class="bad">Usuário inválido.</div>`));
+  }
+
+  if (!revokedCNs().has(username)) {
+    return res.status(400).type("html").send(homeHtml(
+      `<div class="bad">Só é possível deletar clientes revogados.</div>
+       <div class="mut" style="margin-top:6px">Revogue <span class="file">${esc(username)}</span> antes de deletar.</div>`
+    ));
+  }
+
+  const removed = [];
+  try {
+    for (const f of listOvpnFiles().filter(f => cnFromFile(f) === username)) {
+      const full = safeJoin(OUT_DIR, f);
+      if (full && fs.existsSync(full)) {
+        fs.unlinkSync(full);
+        removed.push(f);
+      }
+    }
+
+    const ccd = safeJoin(CCD_DIR, username);
+    if (ccd && fs.existsSync(ccd)) {
+      fs.unlinkSync(ccd);
+      removed.push(`ccd/${username}`);
+    }
+  } catch (err) {
+    return res.status(500).type("html").send(homeHtml(
+      `<div class="bad">Falha ao deletar.</div><pre>${esc(maskPaths(String(err)))}</pre>`
+    ));
+  }
+
+  const msg = removed.length
+    ? `<div class="ok">Deletado.</div>
+       <div class="mut" style="margin-top:6px">Removido: ${removed.map(r => `<span class="file">${esc(r)}</span>`).join(", ")}</div>
+       <div class="mut" style="margin-top:6px">O certificado continua revogado na CRL.</div>`
+    : `<div class="mut">Nada a remover para <span class="file">${esc(username)}</span>.</div>`;
+
+  return res.type("html").send(homeHtml(msg));
 });
 
 app.post("/revoke", auth, async (req, res) => {
