@@ -14,6 +14,15 @@ const maskPaths = (s = "") =>
 const esc = (s="") =>
   String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+const fmtBytes = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v ?? "");
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0, x = n;
+  while (x >= 1024 && i < units.length - 1) { x /= 1024; i++; }
+  return `${i === 0 ? x : x.toFixed(1)} ${units[i]}`;
+};
+
 const app = express();
 
 // ===== Config =====
@@ -377,26 +386,58 @@ app.get("/connections", auth, (req, res) => {
   }
 
   const txt = fs.readFileSync(statusFile, "utf8");
-  const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
+  const lines = txt.split("\n").map(l => l.replace(/\r$/, "")).filter(l => l.trim());
 
-  // pega timestamp "Updated,YYYY-MM-DD HH:MM:SS"
-  const updatedLine = lines.find(l => l.startsWith("Updated,"));
-  const updated = updatedLine ? updatedLine.split(",").slice(1).join(",") : "";
+  let updated = "";
+  let clients = [];
 
-  // seção CLIENT LIST (CSV)
-  const idxClientHeader = lines.findIndex(l => l.startsWith("Common Name,Real Address"));
-  const idxRouting = lines.findIndex(l => l === "ROUTING TABLE");
+  const isV3 = lines.some(l => l.startsWith("CLIENT_LIST\t") || l.startsWith("HEADER\tCLIENT_LIST\t"));
 
-  const clientRows = (idxClientHeader >= 0)
-    ? lines.slice(idxClientHeader + 1, idxRouting >= 0 ? idxRouting : lines.length)
-    : [];
+  if (isV3) {
+    // status-version 3: campos separados por TAB, com prefixo por linha
+    const timeLine = lines.find(l => l.startsWith("TIME\t"));
+    updated = timeLine ? timeLine.split("\t")[1] || "" : "";
 
-  const clients = clientRows
-    .filter(l => l.includes(","))
-    .map(l => {
-      const [name, real, rx, tx, since] = l.split(",");
-      return { name, real, rx, tx, since };
-    });
+    // o HEADER descreve a ordem das colunas do CLIENT_LIST
+    const headerLine = lines.find(l => l.startsWith("HEADER\tCLIENT_LIST\t"));
+    const cols = headerLine ? headerLine.split("\t").slice(2) : [];
+    const col = (row, name, fallbackIdx) => {
+      const i = cols.indexOf(name);
+      return (i >= 0 ? row[i] : row[fallbackIdx]) || "";
+    };
+
+    clients = lines
+      .filter(l => l.startsWith("CLIENT_LIST\t"))
+      .map(l => {
+        const row = l.split("\t").slice(1);
+        return {
+          name:    col(row, "Common Name", 0),
+          real:    col(row, "Real Address", 1),
+          virtual: col(row, "Virtual Address", 2),
+          rx:      col(row, "Bytes Received", 4),
+          tx:      col(row, "Bytes Sent", 5),
+          since:   col(row, "Connected Since", 6),
+        };
+      });
+  } else {
+    // status-version 1/2: CSV, com "Updated," e marcador "ROUTING TABLE"
+    const updatedLine = lines.find(l => l.startsWith("Updated,"));
+    updated = updatedLine ? updatedLine.split(",").slice(1).join(",") : "";
+
+    const idxClientHeader = lines.findIndex(l => l.startsWith("Common Name,Real Address"));
+    const idxRouting = lines.findIndex(l => l.trim() === "ROUTING TABLE");
+
+    const clientRows = (idxClientHeader >= 0)
+      ? lines.slice(idxClientHeader + 1, idxRouting >= 0 ? idxRouting : lines.length)
+      : [];
+
+    clients = clientRows
+      .filter(l => l.includes(","))
+      .map(l => {
+        const [name, real, rx, tx, since] = l.split(",");
+        return { name, real, virtual: "", rx, tx, since };
+      });
+  }
 
   const body = `
     <div class="card" style="grid-column:1/-1">
@@ -414,6 +455,7 @@ app.get("/connections", auth, (req, res) => {
             <tr style="text-align:left">
               <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Common Name</th>
               <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Real Address</th>
+              <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Virtual Address</th>
               <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">Connected Since</th>
               <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">RX</th>
               <th style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mut)">TX</th>
@@ -426,12 +468,13 @@ app.get("/connections", auth, (req, res) => {
                   <tr>
                     <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="file">${esc(c.name)}</span></td>
                     <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.real)}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="file">${esc(c.virtual || "-")}</span></td>
                     <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.since)}</td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.rx)}</td>
-                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(c.tx)}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(fmtBytes(c.rx))}</td>
+                    <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.06)">${esc(fmtBytes(c.tx))}</td>
                   </tr>
                 `).join("")
-                : `<tr><td colspan="5" class="mut" style="padding:12px">Nenhum cliente conectado.</td></tr>`
+                : `<tr><td colspan="6" class="mut" style="padding:12px">Nenhum cliente conectado.</td></tr>`
             }
           </tbody>
         </table>

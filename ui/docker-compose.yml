@@ -14,7 +14,8 @@ services:
       - /home/<USER>/openvpn-ca:/home/<USER>/openvpn-ca
       - /home/<USER>/openvpn-clients:/home/<USER>/openvpn-clients
       - /opt/ovpn-ui/scripts:/opt/scripts
-      - /run/openvpn/server.status:/run/openvpn/server.status:ro
+      # arquivo da diretiva "status" do server.conf (status-version 3)
+      - /var/log/openvpn/openvpn-status.log:/run/openvpn/server.status:ro
       - /etc/openvpn/ccd:/etc/openvpn/ccd
     networks:
       - iotalltech-net
